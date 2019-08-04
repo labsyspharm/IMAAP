@@ -12,8 +12,7 @@ Load the library
 ```R
 library(IMAAP)
 ```
-
-# Annotation
+# Requirements
 In order to infer the celltypes/states from the users data, the user needs to provide the data and a predefined mapping of channels/markers to cell types/states (the package calls this cheat_sheet). The package comes with a small example of 10,000 cells and its corresponding cheat_sheet.
 
 In order to take a peak at the examples use the following commands in the R terimnal
@@ -53,6 +52,7 @@ The above is an example of the cheat sheet. Please follow the same format withou
 cheat_sheet <- read.table(file = "cheat_sheet.txt", sep='\t', header = T, stringsAsFactors=FALSE)
 ```
 
+# Annotation
 ## Run the algorithm to annotate cells
 Once the data and cheat_sheet is ready, the algorithm can be run to annotate the cells.
 
@@ -63,7 +63,8 @@ annotate_the_cells <-imaap_annotate_cells (data = example_data, cheat_sheet = ex
 To view the results, do the following
 
 ```R
-head(annotate_the_cells[3]
+results <- annotate_the_cells[3]
+head(results)
 
 40_385  Endothelial cells
 40_1108    M2 macrophages
