@@ -48,15 +48,17 @@ example_cheat_sheet
 ```
 The above is an example of the cheat sheet. Please follow the same format without editing the column names. My recommendation would be to download the given cheat sheet (found with in the *data* folder), edit as necessary and load it, using the following command.
 
-The algorithm follows a sequential annotation methodology. For example, based on the above cheat_sheet, the cells first gated based on CD45 to annotate then as 'immune' or 'other'. 
+The algorithm follows a sequential annotation methodology. For example, based on the above cheat_sheet, 
 
-Lines 2 - 3: takes in the 'other cells' and checks for CD45 Neg tumor or endothelial cells. 
+**Line 1-** the cells are first gated based on CD45 to annotate then as 'immune' or 'other'. 
 
-Line 4 - 8: takes the immune cells and divides them into Tumor cells (lymphoma), T cells, B cells and macrophages
+**Lines 2 - 3:** takes in the 'other cells' and checks for CD45 Neg tumor or endothelial cells. 
 
-Line 9 - 10: Takes the macrophages and divides into M1 and M2 macrophages.
+**Line 4 - 8:** takes the immune cells and divides them into Tumor cells (lymphoma), T cells, B cells and macrophages
 
-/ means 'OR': For example (line 7)- Macrophages could be defined by the expression of CD68 or CD 163.
+**Line 9 - 10:** Takes the macrophages and divides into M1 and M2 macrophages.
+
+/ means 'OR': For example **(line 7)**- Macrophages could be defined by the expression of CD68 or CD 163.
 
 ```R
 cheat_sheet <- read.table(file = "cheat_sheet.txt", sep='\t', header = T, stringsAsFactors=FALSE)
