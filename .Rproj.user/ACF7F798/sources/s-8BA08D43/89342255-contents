@@ -1,0 +1,11 @@
+Package: IMAAP
+Type: Package
+Title: Annotation and Analysis of Multiplexed Imaging Data
+Version: 0.1.0
+Author: Ajit Johnson Nirmal
+Maintainer: Ajit Johnson Nirmal <ajitj_nirmal@dfci.harvard.edu>
+Description: R package used to analyse Imaging Data. Works with CyCIf data.
+License: MIT
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.1.1

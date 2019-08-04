@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1564753499553.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "12|30|110|0|\n112|36|179|0|\n181|36|225|0|\n",
+    "hash" : "2224412470",
+    "id" : "A4FD95DC",
+    "lastKnownWriteTime" : 1564589654,
+    "last_content_update" : 1564755065275,
+    "path" : "C:/Users/ajn16/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/Modelling.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "181,0",
+        "scrollLine" : "0"
+    },
+    "relative_order" : 5,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -1,0 +1,523 @@
+# Function for cell type calling from CycIF data.
+# Author: Ajit Johnson Nirmal
+
+# Load Library ------------------------------------------------------------
+library(magrittr) # Plotting
+library(ggplot2) # Plotting
+library(gridExtra)
+
+# For running cell_calling algorithm on individual dseases with mean constrains
+
+#Functions
+# Model data
+g_model <- function(data, SD){
+  require(mixtools)
+  # Normalisation
+  #data <- exp(data)-1
+  data <- (data/rowSums(data))*median(unlist(as.list(as.data.frame(t(data)))))
+  #data <- data/rowSums(data)
+  # Transform data
+  d <- log1p(data)
+  fn <- function(x) x * 10/max(x, na.rm = TRUE)
+  d <- data.frame(lapply(d, fn))
+  row.names(d) <- row.names(data)
+  m_data <- d
+  n_data <- d
+  # Intialize certain dataframes
+  peaks_low <- data.frame()
+  peaks_high <- data.frame()
+  # Start the model
+  # Loop throup every marker and fit the model
+  for (i in 1: ncol(d)) {
+    print(colnames(d[i]))
+    print(i)
+    set.seed(100)
+    # Intial modeling
+    mixmdl <- normalmixEM(d[,i], k = 2, maxit = 100000000, arbvar = FALSE, ECM = TRUE,mu = c(0,10))
+    # Check if the model worked in describing the negative and positive populations of cells
+    if (mixmdl$mu[which.max(mixmdl$mu)] > mixmdl$mu[which.min(mixmdl$mu)]+mixmdl$sigma[which.min(mixmdl$mu)]){
+      # Do nothing and get the values that are required from the model
+      l <- mixmdl$mu[which.max(mixmdl$mu)] - SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      h <- mixmdl$mu[which.max(mixmdl$mu)] + SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      # Score the probabilities
+      m_data[,i] <- d[,i]
+      d[,i][which(d[,i] <= l)] <- 0
+      d[,i][which(d[,i] >= h)] <- 1
+      if (length(which(d[,i] > l & d[,i] < h)) == 0){} else {
+        d[,i][which(d[,i] > l & d[,i] < h)] <- as.numeric(cut(d[,i][which(d[,i] > l & d[,i] < h)], 10)) / 10
+      }
+
+    } else {
+      # Refit the model with relaxed model
+      mixmdl <- normalmixEM(d[,i], k = 2, maxit = 100000000, arbvar = TRUE, ECM = TRUE, mu = c(0,10))
+      # Get the peak information from the model
+      l <- mixmdl$mu[which.max(mixmdl$mu)] - SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      h <- mixmdl$mu[which.max(mixmdl$mu)] + SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      # Score the probabilities
+      m_data[,i] <- d[,i]
+      colnames(m_data)[i] <- paste(colnames(d[i]),"Model-2")
+      d[,i][which(d[,i] <= l)] <- 0
+      d[,i][which(d[,i] >= h)] <- 1
+      if (length(which(d[,i] > l & d[,i] < h)) == 0){} else {
+        d[,i][which(d[,i] > l & d[,i] < h)] <- as.numeric(cut(d[,i][which(d[,i] > l & d[,i] < h)], 10)) / 10
+      }
+
+    }
+    # Write another IF statement to check the model is still not properly fit
+    if (mixmdl$mu[which.max(mixmdl$mu)] <= mixmdl$mu[which.min(mixmdl$mu)]+mixmdl$sigma[which.min(mixmdl$mu)]){
+      # Use the untransformed data to fit the model
+      mixmdl <- normalmixEM(data[,i], k = 2, maxit = 100000000, arbvar = FALSE, ECM = TRUE)
+      # Get the peak information from the model
+      l <- mixmdl$mu[which.max(mixmdl$mu)] - SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      h <- mixmdl$mu[which.max(mixmdl$mu)] + SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      # Score the probabilities
+      m_data[,i] <- data[,i]
+      colnames(m_data)[i] <- paste(colnames(d[i]),"Model-3")
+      data[,i][which(data[,i] <= l)] <- 0
+      data[,i][which(data[,i] >= h)] <- 1
+      if (length(which(data[,i] > l & data[,i] < h)) == 0){} else {
+        data[,i][which(data[,i] > l & data[,i] < h)] <- as.numeric(cut(data[,i][which(data[,i] > l & data[,i] < h)], 10)) / 10
+      }
+      d[,i] <- data[,i]
+      n_data[,i] <- data[,i]
+
+    } else {}
+
+    if (mixmdl$mu[which.max(mixmdl$mu)] <= mixmdl$mu[which.min(mixmdl$mu)]+mixmdl$sigma[which.min(mixmdl$mu)]) {
+      print(paste("Unable to fit perfect model for", colnames(data[i])))
+    } else {}
+
+    # Other required values for generating distribution plots
+    p_low <- data.frame(mixmdl$mu[1],mixmdl$sigma[1],mixmdl$lambda[1])
+    p_high <- data.frame(mixmdl$mu[2],mixmdl$sigma[2],mixmdl$lambda[2])
+    p_low$marker <- colnames(data[i])
+    p_high$marker <- colnames(data[i])
+    peaks_low <- rbind(peaks_low, p_low)
+    peaks_high <- rbind(peaks_high, p_high)
+
+    # Normalize data based on the distribution
+    n_data[,i][which(n_data[,i] <= mixmdl$mu[which.max(mixmdl$mu)] - SD*mixmdl$sigma[which.max(mixmdl$mu)])] <- 0
+    # Scale data
+    #n_data[,i] <- scale(n_data[,i], center = F)
+    #n_data[,i] <- n_data[,i] - mixmdl$mu[which.max(mixmdl$mu)]
+    #n_data[,i] <- n_data[,i] - SD*mixmdl$sigma[which.max(mixmdl$mu)]
+    # Scale data
+    #n_data[,i] <- 10 * (n_data[,i] - quantile( n_data[,i], 0 )) / (quantile( n_data[,i], 1 ) - quantile( n_data[,i], 0 )) - 5
+
+  }
+  g_mod <- list(scores = d, peaks_low = peaks_low, peaks_high = peaks_high, M = m_data, norm_data = n_data)
+  return(g_mod)
+
+}
+# Function to determine the probablity of each marker
+g_cellscore <- function(score,meta){
+  require(dplyr)
+  # Remove all columns with only NA
+  meta <- meta[,colSums(is.na(meta))<nrow(meta)]
+  # Subset Meta Data to include only gene names
+  m =meta[ , names(meta)[-c(1,2)], drop = FALSE]
+  # Create an empty list for the following loop
+  cell_list = list()
+  add_residual_list = list()
+  for (i in 1:nrow(m)){
+    l = unlist(as.list(m[i,])[as.list(m[i,]) != ""])
+    # For every cell-type create a list to add, substract or concatenate ("OR") the calculated scores.
+    addition = list()
+    subtraction = list()
+    concatination = list()
+    # Seperates the markes into their respective functions
+    for (j in 1: length(l)){
+      if (startsWith(l[j], "/")){
+        concatination = c(concatination, substring(l[[j]], 2))
+      } else if (startsWith(l[j], "-")) {
+        subtraction = c(subtraction,substring(l[[j]], 2))
+      } else { addition = c(addition,l[[j]])}
+    }
+    addition = unlist(addition)
+    subtraction = unlist(subtraction)
+    concatination = unlist(concatination)
+
+    # Now subset the scores to perform the actual calculations.
+    # Addition
+    if(length(addition) != 0){score_add = rowSums(score[,addition, drop = FALSE])/length(addition)} else {score_add = (0)}
+    # Addition of more than one element (make sure all markers are expressed)
+    if(length(addition) > 1){
+      # intialise list
+      k = c()
+      t_score = score[,addition, drop = FALSE]
+      # Converting all elements into zero even if one of the markers is zero
+      for (row in 1: nrow(t_score)){
+        if(any(t_score[row,] == 0)){k = c(k, meta$cell_type[i])} else {k = c(k, NA)}}
+    } else{k = rep(NA, nrow(score))}
+    # Subtraction
+    if(length(subtraction) != 0){score_sub = rowSums(score[,subtraction, drop = FALSE])/length(subtraction)} else {score_sub = (0)}
+    # Subtraction subsection (if there are only negative markers for a cell type)
+    if(length(score_sub) > 1 & length(addition) == 0 & length(concatination) == 0){score_sub = 1- score_sub}
+    # Concatination (take the maximum of the given markers)
+    if(length(concatination) != 0){score_concat = apply(score[,concatination, drop = FALSE], 1, max)} else {score_concat = (0)}
+    # Combine all togeather to get a master score for each cell-type.
+    if(length(score_sub) > 1 & length(addition) == 0 & length(concatination) == 0){
+      master_score = score_add + score_concat + score_sub} else {
+        master_score = score_add + score_concat - score_sub
+      }
+
+    cell_list[[i]] = master_score
+    add_residual_list[[i]] = k
+  }
+
+  # Convert the generated list into a dataframe.
+  cell_score = lapply(cell_list, data.frame, stringsAsFactors = FALSE)
+  add_residual = lapply(add_residual_list, data.frame, stringsAsFactors = FALSE)
+  cell_score = bind_cols(cell_score)
+  add_residual = bind_cols(add_residual)
+  colnames(cell_score) = meta$cell_type
+  colnames(add_residual) = paste("Likely_",meta$cell_type)
+  row.names(cell_score) = row.names(score)
+  row.names(add_residual) = row.names(score)
+  final_score = cbind(cell_score, add_residual)
+  final_score <- final_score[,colSums(is.na(final_score))<nrow(final_score)]
+  return(final_score)
+}
+# Function to compute the Probability at every nodal level of the probability tree
+g_prob <- function(cell_score,meta){
+  # Split the dataframe
+
+  if (any(grepl("Likely_", colnames(cell_score)))){cell_score = cell_score[,-grep("Likely_", colnames(cell_score))]} else {cell_score = cell_score}
+  # Convert into factor
+  meta$Path <- factor(meta$Path, levels = unique(meta$Path))
+  # Intialise dataframes
+  cell_annotation = data.frame("cell_id" = row.names(cell_score), "cell_order"= seq(from = 1, to = nrow(cell_score)))
+  sub_type_all = data.frame("cell_id" = row.names(cell_score))
+  #Loop
+  for (i in 1: nlevels(meta$Path)){
+    print(i)
+    row_id = list()
+    # Define Cells (Rows)
+    if(nchar(levels(meta$Path)[i]) < 1){
+      cells_of_interest = row.names(cell_score)
+    } else if (length(levels(meta$Path)) == 1){
+      cells_of_interest = row.names(cell_score)
+    } else if(levels(meta$Path)[i] %in% colnames(sub_type_all)){
+      # } else if(levels(meta$Path)[i] %in% unique(cell_annotation[,paste("Level", i-1)])){
+      #cells_of_interest = row.names(subset(prob, marker == levels(meta$Path)[i]))
+      for (j in 1: nrow(cell_annotation)){if (levels(meta$Path)[i] %in% cell_annotation[j,]){row_id = unlist(c(row_id, as.character(cell_annotation$cell_id[j])))}}
+      cells_of_interest = row_id
+    } else if(levels(meta$Path)[i] %in% unique(cell_annotation[,paste("Level", i-1)])){
+      #cells_of_interest = row.names(subset(prob, marker == levels(meta$Path)[i]))
+      for (j in 1: nrow(cell_annotation)){if (levels(meta$Path)[i] %in% cell_annotation[j,]){row_id = unlist(c(row_id, as.character(cell_annotation$cell_id[j])))}}
+      cells_of_interest = row_id
+    } else{print(paste(levels(meta$Path)[i], "not found"))}
+    # Define cell_types (Columns)
+    scores_of_interest = subset(meta, Path %in% levels(meta$Path)[i])$cell_type
+    # Create the dataframe of intrested cells and their cell types
+    sub_type = cell_score[cells_of_interest, scores_of_interest, drop = FALSE]
+    sub_type[sub_type < 0] <- 0
+    sub_type_all <- merge(sub_type_all, sub_type, by.x = "cell_id", by.y="row.names", all = TRUE)
+    # Calculate Probability scores
+    prob <- replace(sub_type/rowSums(sub_type), is.na(sub_type/rowSums(sub_type)), 0)
+    prob$other <- 1- rowSums(prob)
+    prob$marker <- colnames(prob)[apply(prob,1,which.max)]
+    prob1 <- prob[,c("marker"),drop = FALSE]
+    colnames(prob1) <- paste("Level", i)
+    cell_annotation = merge(cell_annotation, prob1, by.x = "cell_id", by.y="row.names", all = TRUE)
+    cell_annotation <- cell_annotation[order(cell_annotation$cell_order),]
+  }
+  return(cell_annotation)
+}
+# Function to modify cell types
+g_trim <- function(cell_score,cell_annotation,meta){
+  meta$Path = factor(meta$Path, levels = unique(meta$Path))
+
+  if (any(grepl("Likely_", colnames(cell_score)))){
+
+
+    likely = cell_score[,grep("Likely_", colnames(cell_score)), drop = FALSE]
+    # Intialize list to hold the values of cell types to look at
+    cells = c()
+    for (name in 1: ncol(likely)){cells = c(cells, names(table(likely[name])))}
+    # Find the levels in which the cell types occur
+    levs = c()
+    for (lev in 1: length(cells)){levs = c(levs, as.character(meta$Path[which(meta$cell_type == cells[lev])]))}
+    # Get the level numbers that mattch cell_annotation column names
+    levs_number = c()
+    for (lev_num in 1: length(levs)){levs_number = c(levs_number,paste("Level",which(levels(meta$Path) == levs[lev_num])))}
+    # Create datasets
+    cell_annotation_1 = cell_annotation[,levs_number, drop = FALSE]
+    cell_annotation_1[is.na(cell_annotation_1)] <- 0
+    likely[is.na(likely)] <- 1
+    # compare the lists to check if any of the cell annonations need to be modified
+    modify = list()
+    for (j in 1: ncol(likely)) {
+      x = c()
+      for(k in 1: nrow(likely)){
+        if (likely[k,j] == cell_annotation_1[k,j]){x = c(x,row.names(likely)[k])} else{x = c(x,NA)}
+        modify[[j]] = x
+      }
+    }
+    # Convert the generated list into a dataframe.
+    modify = lapply(modify, data.frame, stringsAsFactors = FALSE)
+    modify = bind_cols(modify)
+    colnames(modify) = colnames(likely)
+    # Replace elements with modified cell type calling
+    # colnames to change
+    for (m in 1: ncol(likely)){
+      for (n in 1: nrow(cell_annotation)){
+        if (any(modify[,m][!is.na(modify[,m])] == as.character(cell_annotation[n,"cell_id"]))){
+          cell_annotation[n,levs_number[m]] <- colnames(likely[m])}
+      }
+    }} else {
+
+      print("No likely changes in cell type annotation")}
+
+  return(cell_annotation)
+}
+#Plottinf Function
+g_plot <- function(data,peaks_low,peaks_high){
+  require(magrittr) # Plotting
+  require(ggplot2) # Plotting
+  require(gridExtra)
+  # Gaussian mixture plotting function
+  plot_mix_comps <- function(x, mu, sigma, lam) {lam * dnorm(x, mu, sigma)}
+  for (i in 1: ncol(data)){
+    P1 <- data.frame(x = data[,i]) %>%
+      ggplot() + ggtitle(colnames(data[i]))+
+      geom_histogram(aes(x, ..density..), binwidth = 1, colour = "black", fill = "white") +
+      stat_function(geom = "line", fun = plot_mix_comps,
+                    args = list(peaks_low[i,][[1]], peaks_low[i,][[2]], lam = peaks_low[i,][[3]]),
+                    colour = "red", lwd = 1.5) +
+      stat_function(geom = "line", fun = plot_mix_comps,
+                    args = list(peaks_high[i,][[1]], peaks_high[i,][[2]], lam = peaks_high[i,][[3]]),
+                    colour = "blue", lwd = 1.5) +
+      geom_vline(xintercept = peaks_high[i,][[1]], color = "grey", size=1.5) +
+      geom_vline(xintercept = peaks_high[i,][[1]] - 3*peaks_high[i,][[2]], color = "black", size=1.5) +
+      ylab("Density")
+    print(colnames(data[i]))
+    #print(P1)
+    my_plots[[i]] <<- P1
+  }
+  return(my_plots)
+}
+# Function to collapse into desidered levels
+g_collapse <- function(cell_calling, collapse_by){
+  require("zoo")
+  require("dplyr")
+  cell_annot <- cell_calling$combined_annotation_modified
+  # Intialize dataframe to store ressults
+  compressed <- data.frame(row.names = row.names(cell_annot))
+  for (i in 1: length(collapse_by)){
+    sub_annot <- cell_annot[,unlist(collapse_by[i])]
+    sub_annot <- data.frame(t(apply(sub_annot, 1, na.locf, na.rm=FALSE)))[,length(unlist(collapse_by[i])), drop = FALSE]
+    compressed <- cbind(compressed,sub_annot)
+  }
+
+  if (ncol(cell_annot) == sum(lengths(collapse_by))){} else {
+    leftover_columns <- seq(from = sum(lengths(collapse_by))+1, to = ncol(cell_annot))
+    compressed <- cbind(compressed, cell_annot[,leftover_columns, drop = FALSE])}
+
+  return(compressed)
+}
+# Function to stich manually run individual annotations
+g_ordered <- function(data, collapsed){
+  # Normalisation
+  #ann_data <- (data/rowSums(data))*median(unlist(as.list(as.data.frame(t(data)))))
+  ann_data <- data
+  # Transform data
+  d <- log1p(data)
+  #fn <- function(x) x * 10/max(x, na.rm = TRUE)
+  #d <- data.frame(lapply(d, fn))
+  #row.names(d) <- row.names(data)
+  # Create a daaframe with both annotation and data
+  ann_data <- d
+  ann_data <- merge(ann_data, collapsed[,1, drop= FALSE], by= "row.names")
+  row.names(ann_data) <- ann_data[,1]
+  ann_data  <- ann_data[,-1]
+  ann_data <- merge(ann_data, collapsed[,2, drop= FALSE], by= "row.names")
+  ann_data <- ann_data[order(ann_data$Level.3),]
+  row.names(ann_data) <- ann_data[,1]
+  ann_data  <- ann_data[,-1]
+  # data
+  allgenes <- colnames(data)
+  mydata = ann_data[,allgenes]
+  # Order Data
+  m_data <- mydata
+  m_data$Mean <- rowMeans(m_data)
+
+  mydata_ordered <- data.frame()
+  for (i in levels(ann_data$Level.3)){
+    datA <- m_data[ which(ann_data$Level.3==i), ]
+    datA <-datA[order(-datA$Mean),]
+    mydata_ordered <- rbind(mydata_ordered,datA)
+  }
+
+  mydata_ordered = mydata_ordered[,-ncol(mydata_ordered)]
+  g_ordered <- list(ann_data = ann_data, mydata_ordered = mydata_ordered)
+  return(g_ordered)
+}
+
+# Overall Wrapper
+my_plots = list()
+find_cycif <- function(d, meta, section, runby, SD) {
+  combined_annotation = data.frame()
+  combined_annotation_modified = data.frame()
+  combined_n_data = data.frame()
+  for (i in levels(as.factor(section[,runby]))){
+    print (paste("Processing sample-", i))
+    data <- d[row.names(section[which(section[,runby] == i), ,drop= FALSE]),]
+    # Get the scores from the model
+    s = g_model(data, SD)
+    score = data.frame(s[1])
+    colnames(score) = colnames(data)
+    # Derive probablilities
+    cell_score <- g_cellscore(score,meta)
+    # Annotate cells
+    cell_annotation = g_prob(cell_score,meta)
+    # Annotate remainder cells
+    modified_cell_annotation = g_trim (cell_score,cell_annotation,meta)
+    # Plot the map for every "RunBy'
+    peaks_low = data.frame(s[2])
+    peaks_high = data.frame(s[3])
+    my_plots = list()
+    my_plots = g_plot(data = data.frame(s[4]),peaks_low,peaks_high)
+    # save plot
+    dir.create("celltype_calling", showWarnings = FALSE)
+    pdf(paste("./celltype_calling/section-", i,".pdf" ), width = 9.5, height = 12) # Open a new pdf file
+    grid.arrange(grobs = my_plots, ncol = 4) # Write the grid.arrange in the file
+    dev.off() # Close the file
+    # Combine the annotation and modified annotation into one mega file
+    combined_annotation = rbind(combined_annotation, cell_annotation)
+    combined_annotation_modified = rbind(combined_annotation_modified, modified_cell_annotation)
+    combined_n_data = rbind(combined_n_data,data.frame(s[5]))
+
+  }
+  row.names(combined_annotation) = combined_annotation$cell_id
+  combined_annotation = combined_annotation[, -c(1,2)]
+
+  row.names(combined_annotation_modified) = combined_annotation_modified$cell_id
+  combined_annotation_modified = combined_annotation_modified[, -c(1,2)]
+
+  colnames(combined_n_data) = colnames(d)
+
+  cell_calling <- list(combined_annotation = combined_annotation, combined_annotation_modified = combined_annotation_modified, combined_n_data = combined_n_data)
+  return(cell_calling)
+}
+find_cycif_fig <- function(d, meta, section, runby, SD) {
+  for (i in levels(as.factor(section[,runby]))){
+    print (paste("Processing sample-", i))
+    rows_to_subset <- row.names(section[which(section[,runby] == i), ,drop= FALSE])
+    data <- d[rows_to_subset,]
+    # Get the scores from the model
+    s = g_model(data, SD)
+    # Plot the map for every "RunBy'
+    peaks_low = data.frame(s[2])
+    peaks_high = data.frame(s[3])
+    my_plots = list()
+    my_plots = g_plot(data = data.frame(s[4]),peaks_low,peaks_high)
+    # save plot
+    dir.create("celltype_calling", showWarnings = FALSE)
+    pdf(paste("./celltype_calling/section-", i,".pdf" ), width = 9.5, height = 12) # Open a new pdf file
+    grid.arrange(grobs = my_plots, ncol = 4) # Write the grid.arrange in the file
+    dev.off() # Close the file
+
+  }
+}
+
+# Heat mapa
+g_heatmap <- function(data, section, moi, annotation){
+  require(RColorBrewer)
+  require(ComplexHeatmap)
+  # Log transoform data
+  data <- log1p(data)
+  # Scale data
+  rm <- rowMeans(data)
+  sx <- apply(data, 1, sd)
+  zz <- sweep(data,1,rm)
+  zz <- sweep(zz, 1, sx, "/")
+  data_new <- t(scale(t(data)))
+  data_new_meta <- merge(data_new, section, by = "row.names", sort = FALSE)
+
+  # USing fast dendrogram
+  fh = function(x) fastcluster::hclust(dist(x))
+
+  # Create Heatmap
+  mat1 <- data_new[,moi]
+  mat2 <- data_new[,setdiff(colnames(data_new), moi)]
+
+  # Setting heatmap colors
+  Colors=rev(brewer.pal(10,"RdBu"))
+  Colors=colorRampPalette(Colors)(100)
+
+  #annotation <- section[row.names(data),]
+
+  # Divide into two heatmaps
+  ht1 = Heatmap(mat1, name = "Cell types", split = annotation[,1,drop=FALSE], gap = unit(3, "mm"),show_row_names = FALSE,row_title_gp  = gpar(fontsize = 8), col = Colors, cluster_columns = FALSE, cluster_rows = fh)
+  ht2 = Heatmap(mat2, name = "Pathways", split = annotation[,1,drop=FALSE], gap = unit(3, "mm"),show_row_names = FALSE,row_title_gp  = gpar(fontsize = 8), col = Colors, cluster_rows = FALSE)
+
+  # Plot the heatmap
+  ht1 + ht2
+}
+
+# Meta data vizulaization
+# Distribuion of cell types among patients
+g_cell_patient <- function(annotation, section){
+  require(ggplot2)
+  require(dplyr)
+  require(tidyr)
+  require(RColorBrewer)
+
+  # RENAME column of annotation file to be more systamatic
+  colnames(annotation) <- LETTERS[seq( from = 1, to = ncol(annotation) )]
+  # Merge with meta data (section)
+  annotation_section <- merge(annotation, section, by = "row.names")
+  # create a cross table of patient and cell type
+  melted_data <- rename(count(annotation_section, A, Patient), Freq = n)
+  # Plot
+  ggplot(melted_data, aes(x = Patient, y = Freq, fill = A)) +
+    geom_bar(position = "fill",stat = "identity") +
+    scale_y_continuous(labels = scales::percent_format())+ theme_classic()+ scale_fill_brewer(palette="Spectral")+
+    theme(text = element_text(size=20), axis.text.x = element_text(angle=45, hjust=1))
+}
+
+# Distribuion of cell types among cores
+g_cell_core <- function(annotation, section){
+  require(ggplot2)
+  require(dplyr)
+  require(tidyr)
+  require(RColorBrewer)
+
+  # RENAME column of annotation file to be more systamatic
+  colnames(annotation) <- LETTERS[seq( from = 1, to = ncol(annotation) )]
+  # Merge with meta data (section)
+  annotation_section <- merge(annotation, section, by = "row.names")
+  annotation_section <- annotation_section[order(annotation_section$core_ID),]
+  # create a cross table of patient and cell type
+  melted_data <- rename(count(annotation_section, A, core_ID), Freq = n)
+  melted_data$core_ID = as.character(melted_data$core_ID)
+  # make core_ID an ordered factor
+  melted_data$core_ID <- factor(melted_data$core_ID, levels = names(table(annotation_section$core_ID)))
+  # Plot
+  ggplot(melted_data, aes(x = core_ID, y = Freq, fill = A)) +
+    geom_bar(position = "fill", stat = "identity") +
+    scale_y_continuous(labels = scales::percent_format())+ theme_classic()+ scale_fill_brewer(palette="Spectral")+
+    theme(text = element_text(size=20), axis.text.x = element_text(angle=45, hjust=1))
+}
+
+# Distribuion of patients among cell types
+g_cell_celltype <- function(annotation, section){
+  require(ggplot2)
+  require(dplyr)
+  require(tidyr)
+  require(RColorBrewer)
+
+  # RENAME column of annotation file to be more systamatic
+  colnames(annotation) <- LETTERS[seq( from = 1, to = ncol(annotation) )]
+  # Merge with meta data (section)
+  annotation_section <- merge(annotation, section, by = "row.names")
+  # create a cross table of patient and cell type
+  melted_data <- rename(count(annotation_section, A, Patient), Freq = n)
+  # Plot
+  ggplot(melted_data, aes(x = A, y = Freq, fill = Patient)) +
+    geom_bar(position = "fill",stat = "identity") +
+    scale_y_continuous(labels = scales::percent_format())+ theme_classic()+ scale_fill_brewer(palette="Spectral")+
+    theme(text = element_text(size=20), axis.text.x = element_text(angle=45, hjust=1))+ coord_flip()
+}
+

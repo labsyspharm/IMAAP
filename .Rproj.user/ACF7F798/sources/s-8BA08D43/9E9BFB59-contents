@@ -1,0 +1,58 @@
+#' @title Annotation of cells that did not express one or more markers
+#' @description When multiple markers are used for annotation of a cell type, it is possible that one or more markers are not expressed, this function identifies those cells and marks them.
+#' @param cell_prob Probabilty of expression of a cell type calculated using the function- \code{\link{imaap_prob}}
+#' @param cell_annotation Output of \code{\link{imaap_annotation}}
+#' @param cheat_sheet A CSV file listing the the markers that are used to define a cell type. It needs to follow the defined template.
+#' @return Probability scores for each marker and a deconvolved data matrix for calculating percent positivity of markers of interest.
+#' @examples
+#' model_data = imaap_model (data = exp, SD = 3)
+#' head(model_data[5])
+#' @seealso \code{\link{feature_select}}, \code{\link{example_data}}
+#' @export
+
+imaap_marker_drop <- function(cell_prob, cell_annotation, cheat_sheet){
+  cheat_sheet$Path = factor(cheat_sheet$Path, levels = unique(cheat_sheet$Path))
+
+  if (any(grepl("Likely_", colnames(cell_prob)))){
+
+
+    likely = cell_prob[,grep("Likely_", colnames(cell_prob)), drop = FALSE]
+    # Intialize list to hold the values of cell types to look at
+    cells = c()
+    for (name in 1: ncol(likely)){cells = c(cells, names(table(likely[name])))}
+    # Find the levels in which the cell types occur
+    levs = c()
+    for (lev in 1: length(cells)){levs = c(levs, as.character(cheat_sheet$Path[which(cheat_sheet$cell_type == cells[lev])]))}
+    # Get the level numbers that mattch cell_annotation column names
+    levs_number = c()
+    for (lev_num in 1: length(levs)){levs_number = c(levs_number,paste("Level",which(levels(cheat_sheet$Path) == levs[lev_num])))}
+    # Create datasets
+    cell_annotation_1 = cell_annotation[,levs_number, drop = FALSE]
+    cell_annotation_1[is.na(cell_annotation_1)] <- 0
+    likely[is.na(likely)] <- 1
+    # compare the lists to check if any of the cell annonations need to be modified
+    modify = list()
+    for (j in 1: ncol(likely)) {
+      x = c()
+      for(k in 1: nrow(likely)){
+        if (likely[k,j] == cell_annotation_1[k,j]){x = c(x,row.names(likely)[k])} else{x = c(x,NA)}
+        modify[[j]] = x
+      }
+    }
+    # Convert the generated list into a dataframe.
+    modify = lapply(modify, data.frame, stringsAsFactors = FALSE)
+    modify = bind_cols(modify)
+    colnames(modify) = colnames(likely)
+    # Replace elements with modified cell type calling
+    # colnames to change
+    for (m in 1: ncol(likely)){
+      for (n in 1: nrow(cell_annotation)){
+        if (any(modify[,m][!is.na(modify[,m])] == as.character(cell_annotation[n,"cell_id"]))){
+          cell_annotation[n,levs_number[m]] <- colnames(likely[m])}
+      }
+    }} else {
+
+      print("No likely changes in cell type annotation")}
+
+  return(cell_annotation)
+}

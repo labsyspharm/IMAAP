@@ -1,0 +1,266 @@
+# 5/15/2019
+# Cell type calling
+
+# Setting up the dataset --------------------------------------------------
+# Import data
+cell_id = read.table(file = "PTCLCycle1to13_CellId.csv", sep=',')
+core_num = data.frame(t(read.table(file = "PTCLCycle1to13_CoreNum.csv", sep=',')))
+cyt_exp = read.table(file = "PTCLCycle1to13_CytMedian_nonorm.csv", sep=',')
+nuc_exp = read.table(file = "PTCLCycle1to13_NucMedian_nonorm.csv", sep=',')
+
+# Create a unique cell_id
+ucell_id <- paste(core_num[,1], cell_id[,1], sep = "_")
+
+# Attach the cell_id to expression matrix
+exp_c <- cbind(ucell_id, cyt_exp)
+exp_n <- cbind(ucell_id, nuc_exp)
+
+# Add column names to the expression matrix
+markers <- c('ID','DAPI01', 'back', 'CD2',   'TCR',
+            'DAPI02', 'CD4',  'CD3D',  'CD7',
+            'DAPI03', 'CD43', 'ALK',   'CD45',
+            'DAPI04', 'CD10', 'Ki67',  'CD5',
+            'DAPI05', 'CD11B','FOXP3', 'CD8' ,
+            'DAPI06', 'CD57', 'CD68',  'CD20',
+            'DAPI07', 'CD163','PDL1', 'CD56',
+            'DAPI08', 'CD30', 'KER',   'PD1',
+            'DAPI09', 'CD206','GATA3', 'CD21',
+            'DAPI10', 'S6P',  'PERK','TBet',
+            'DAPI11', 'TDT',  'back1',  'BCL6',
+            'DAPI12', 'EBVLMP','back2', 'CD31',
+            'DAPI13', 'CD16', 'back3',  'PSTAT3')
+
+colnames(exp_c) <- markers
+colnames(exp_n) <- markers
+
+# Remove DAPI and background channels
+exp_c_new <- exp_c %>% select(-contains("DAPI"))
+exp_c_new <- exp_c_new %>% select(-contains("back"))
+
+exp_n_new <- exp_n %>% select(-contains("DAPI"))
+exp_n_new <- exp_n_new %>% select(-contains("back"))
+
+# Fix rownames
+row.names(exp_c_new) <- exp_c_new[,1]
+exp_c_new <- exp_c_new[,-1]
+row.names(exp_n_new) <- exp_n_new[,1]
+exp_n_new <- exp_n_new[,-1]
+
+# Create meta data file
+meta <- cbind(ucell_id,cell_id,core_num)
+colnames(meta) <- c("universal_ID", "cell_ID", "core_ID")
+
+# Save expression matrices
+write.csv(exp_c_new, file = "PTCL_EXP_CYT.csv")
+write.csv(exp_n_new, file = "PTCL_EXP_NUC.csv")
+write.csv(meta, file = "meta.csv")
+
+
+# Further cleaning of data ------------------------------------------------
+setwd("C:/Users/ajn16/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/full_dataset")
+setwd("/Users/aj/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/full_dataset")
+
+exp = read.table(file = "EXP_CYT.csv", sep=',', row.names = 1, header = T)
+meta = read.table(file = "meta.csv", sep=',', row.names = 1, header = T)
+
+# Identify PTCL NOS and ALCL ALK- tumors
+ptcl <- meta[meta$Disease == "PTCL, NOS",]
+alcl <- meta[meta$Disease == "ALCL, ALK-",]
+aitl <- meta[meta$Disease == "Angioimmunoblastic Cell Lymphoma",]
+
+# Remove cores with < 1000 cells
+# Identify cores
+ptcl_cores <- names(which(table(ptcl$core_ID) > 1000))
+alcl_cores <- names(which(table(alcl$core_ID) > 1000))
+aitl_cores <- names(which(table(aitl$core_ID) > 1000))
+# Convert core ID's to strings
+ptcl$core_ID = as.character(ptcl$core_ID)
+alcl$core_ID = as.character(alcl$core_ID)
+aitl$core_ID = as.character(aitl$core_ID)
+# Idntify cell_id
+ptcl_cores_names <- ptcl[ptcl$core_ID %in% ptcl_cores, ]
+alcl_cores_names <- alcl[alcl$core_ID %in% alcl_cores, ]
+aitl_cores_names <- aitl[aitl$core_ID %in% aitl_cores, ]
+# Subset expression matrix
+ptcl_exp <- exp[as.character(ptcl_cores_names$universal_ID),]
+alcl_exp <- exp[as.character(alcl_cores_names$universal_ID),]
+aitl_exp <- exp[as.character(aitl_cores_names$universal_ID),]
+# Removes unwanted markers
+markers_to_remove = c("CD10", "CD11B", "FOXP3", "GATA3", "PERK", "BCL6", "EBVLMP", "ALK")
+`%ni%` <- Negate(`%in%`)
+ptcl_exp <- subset(ptcl_exp, select = names(ptcl_exp) %ni% markers_to_remove)
+alcl_exp <- subset(alcl_exp, select = names(alcl_exp) %ni% markers_to_remove)
+aitl_exp <- subset(aitl_exp, select = names(aitl_exp) %ni% markers_to_remove)
+
+# Remove rows with all zeros
+#ptcl_exp <- ptcl_exp[rowSums(ptcl_exp) > 0, ]
+#row.names(ptcl_cores_names) <- ptcl_cores_names[,1]
+#ptcl_cores_names <- ptcl_cores_names[row.names(ptcl_exp),]
+#alcl_exp <- alcl_exp[rowSums(alcl_exp) > 0, ]
+
+# Remove rows with any zeros
+#ptcl_exp = ptcl_exp[apply(ptcl_exp, 1, function(row) all(row !=0 )),]
+#alcl_exp = alcl_exp[apply(alcl_exp, 1, function(row) all(row !=0 )),]
+
+# Save
+#PTCLNOS
+write.csv(ptcl_exp, file = "PTCL_EXP.csv")
+write.csv(ptcl_cores_names, file = "PTCL_META.csv")
+#ALCL ALK-
+write.csv(alcl_exp, file = "ALCL_EXP.csv")
+write.csv(alcl_cores_names, file = "ALCL_META.csv")
+#AITL
+write.csv(aitl_exp, file = "Aitl_EXP.csv")
+write.csv(aitl_cores_names, file = "Aitl_META.csv")
+
+
+# Load Lib ----------------------------------------------------------------
+library(tidyverse)
+
+
+# ALCL ALK- ---------------------------------------------------------------
+setwd("C:/Users/ajn16/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/ALCL_ALK")
+setwd("/Users/aj/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/ALCL_ALK")
+#exp = read.table(file = "ALCL_EXP.csv", sep=',', row.names = 1, header = T)
+#section= read.table(file = "ALCL_META.csv", sep=',', row.names = 1, header = T)
+#row.names(section) <- section[,1]
+#cheat_sheet <- read.table(file = "cheat_sheet.txt", sep='\t', header = T, stringsAsFactors=FALSE)
+# Load Data
+load('ALCL.RData')
+
+# Get the figures for all the markers for intial check
+find_cycif_fig (d = exp, meta = cheat_sheet, section = section, runby = "Disease", SD=3)
+
+# Run Cell type calling algorithm
+cell_calling <- find_cycif (d = exp, meta = cheat_sheet, section = section, runby = "Disease", SD=3)
+
+# RUn the cell type collapsing tool
+cell_collapsed <- g_collapse (cell_calling, collapse_by = list(c(1,2,3,4)))
+cell_collapsed[,1] <- as.character(cell_collapsed[,1])
+cell_collapsed[,1][cell_collapsed[,1] == 'Likely_ T cells'] <- 'Other Tumor'
+
+# Build a heatmap
+moi <- c("CD45","CD30","CD3D","CD5","CD43","CD2", "CD7","CD4", "CD8","CD20","CD21","CD163","CD206","CD68", "Ki67")
+g_heatmap (data = exp, section = section, moi = moi, annotation = cell_collapsed)
+
+# Patient centric view of data distribution
+g_cell_patient (annotation = cell_collapsed, section = section)
+
+# Core centric view of data distribution
+g_cell_core (annotation = cell_collapsed, section = section)
+
+# Cell type centric view
+g_cell_celltype (annotation= cell_collapsed, section)
+
+# Final dataframe
+final_df <- merge(cell_collapsed, section, by = "row.names")
+final_df <- final_df[,-3]
+colnames(final_df) <- c("Unique_id", "Cell_calling", "cell_id", "core_id", "disease", "patient")
+
+# Export
+write.csv(final_df, "cell_calling.csv")
+
+# Save Data
+save.image(file='ALCL.RData')
+
+
+# PTCL NOS ----------------------------------------------------------------
+setwd("C:/Users/ajn16/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/PTCL_NOS")
+setwd("/Users/aj/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/PTCL_NOS")
+#exp = read.table(file = "PTCL_EXP.csv", sep=',', row.names = 1, header = T)
+#section= read.table(file = "PTCL_META.csv", sep=',', row.names = 1, header = T)
+#row.names(section) <- section[,1]
+#cheat_sheet <- read.table(file = "cheat_sheet.txt", sep='\t', header = T, stringsAsFactors=FALSE)
+# Load Data
+load('PTCL.RData')
+
+
+# Get the figures for all the markers for intial check
+find_cycif_fig (d = exp, meta = cheat_sheet, section = section, runby = "Disease", SD=3)
+
+# Run Cell type calling algorithm
+cell_calling <- find_cycif (d = exp, meta = cheat_sheet, section = section, runby = "Disease", SD=3)
+
+# RUn the cell type collapsing tool
+cell_collapsed <- g_collapse (cell_calling, collapse_by = list(c(1,2,3,4)))
+cell_collapsed[,1] <- as.character(cell_collapsed[,1])
+cell_collapsed[,1][cell_collapsed[,1] == 'Likely_ T cells'] <- 'Tumor'
+
+# Build a heatmap
+
+moi <- c("CD45","CD3D","CD43","CD2","CD4","CD8","CD7","CD5","CD56","CD16","CD20","CD21","CD163","CD206","CD68","Ki67")
+g_heatmap (data = exp, section = section, moi = moi, annotation = cell_collapsed)
+
+# Patient centric view of data distribution
+g_cell_patient (annotation = cell_collapsed, section = section)
+
+# Core centric view of data distribution
+g_cell_core (annotation = cell_collapsed, section = section)
+
+# Cell type centric view
+g_cell_celltype (annotation= cell_collapsed, section)
+
+# Final dataframe
+final_df <- merge(cell_collapsed, section, by = "row.names")
+final_df <- final_df[,-3]
+colnames(final_df) <- c("Unique_id", "Cell_calling", "cell_id", "core_id", "disease", "patient")
+
+# Export
+write.csv(final_df, "PTCL_results.csv")
+
+# Save Data
+save.image(file='PTCL.RData')
+
+
+
+
+# AITL ----------------------------------------------------------------
+setwd("C:/Users/ajn16/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/AITL")
+setwd("/Users/aj/Dropbox (Partners HealthCare)/Data/Vignesh_Lymphoma_tma/cell_type_calling/AITL")
+#exp = read.table(file = "Aitl_EXP.csv", sep=',', row.names = 1, header = T)
+#section= read.table(file = "Aitl_META.csv", sep=',', row.names = 1, header = T)
+#row.names(section) <- section[,1]
+#cheat_sheet <- read.table(file = "cheat_sheet.txt", sep='\t', header = T, stringsAsFactors=FALSE)
+# Load Data
+load('AITL.RData')
+
+
+# Get the figures for all the markers for intial check
+find_cycif_fig (d = exp, meta = cheat_sheet, section = section, runby = "Disease", SD=3)
+
+# Run Cell type calling algorithm
+cell_calling <- find_cycif (d = exp, meta = cheat_sheet, section = section, runby = "Disease", SD=3)
+
+# RUn the cell type collapsing tool
+cell_collapsed <- g_collapse (cell_calling, collapse_by = list(c(1,2,3,4)))
+cell_collapsed[,1] <- as.character(cell_collapsed[,1])
+cell_collapsed[,1][cell_collapsed[,1] == 'Likely_ T cells'] <- 'Tumor'
+summary(data.frame(cell_collapsed$Level.4))
+
+# Build a heatmap
+
+moi <- c("CD45","CD3D","CD43","CD2","CD4","CD8","CD7","CD5","CD56","CD16","CD20","CD21","CD163","CD206","CD68","Ki67")
+g_heatmap (data = exp, section = section, moi = moi, annotation = cell_collapsed)
+
+# Patient centric view of data distribution
+g_cell_patient (annotation = cell_collapsed, section = section)
+
+# Core centric view of data distribution
+g_cell_core (annotation = cell_collapsed, section = section)
+
+# Cell type centric view
+g_cell_celltype (annotation= cell_collapsed, section)
+
+# Final dataframe
+final_df <- merge(cell_collapsed, section, by = "row.names")
+final_df <- final_df[,-3]
+colnames(final_df) <- c("Unique_id", "Cell_calling", "cell_id", "core_id", "disease", "patient")
+
+# Export
+write.csv(final_df, "PTCL_results.csv")
+
+# Save Data
+save.image(file='AITL.RData')
+
+
+

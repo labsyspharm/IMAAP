@@ -1,0 +1,106 @@
+#' @title Fitting a gaussian mixture model to the users data
+#' @description Gaussian mixture model is fit to every marker in the dataset and a probaility score is given to the areas of uncertanity.
+#' @param data Dataframe of transcriptomic data (natural scale) containing samples as rows and markers as columns.
+#' @param SD Standard Deviation. Default is set to 3. This determines to what extend of the data distribution is considered as positive to marker expression. If your data distribution is clearly not bi-modal, it is suggested to be conservative in the selection of an SD value.
+#' @return Probability scores for each marker and a deconvolved data matrix for calculating percent positivity of markers of interest.
+#' @examples
+#' model_data = imaap_model (data = exp, SD = 3)
+#' head(model_data[5])
+#' @seealso \code{\link{feature_select}}, \code{\link{example_data}}
+#' @export
+
+imaap_model <- function(data, SD=3){
+  require(mixtools)
+  # Normalisation
+  #data <- exp(data)-1
+  data <- (data/rowSums(data))*median(unlist(as.list(as.data.frame(t(data)))))
+
+  # Transform data
+  d <- log1p(data)
+  fn <- function(x) x * 10/max(x, na.rm = TRUE)
+  d <- data.frame(lapply(d, fn))
+  row.names(d) <- row.names(data)
+  m_data <- d
+  n_data <- d
+
+  # Intialize certain dataframes
+  peaks_low <- data.frame()
+  peaks_high <- data.frame()
+
+  # Start the model
+  # Loop throup every marker and fit the model
+  for (i in 1: ncol(d)) {
+    print(colnames(d[i]))
+    print(i)
+    set.seed(100)
+    # Intial modeling
+    mixmdl <- normalmixEM(d[,i], k = 2, maxit = 100000000, arbvar = FALSE, ECM = TRUE,mu = c(0,10))
+    # Check if the model worked in describing the negative and positive populations of cells
+    if (mixmdl$mu[which.max(mixmdl$mu)] > mixmdl$mu[which.min(mixmdl$mu)]+mixmdl$sigma[which.min(mixmdl$mu)]){
+      # Do nothing and get the values that are required from the model
+      l <- mixmdl$mu[which.max(mixmdl$mu)] - SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      h <- mixmdl$mu[which.max(mixmdl$mu)] + SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      # Score the probabilities
+      m_data[,i] <- d[,i]
+      d[,i][which(d[,i] <= l)] <- 0
+      d[,i][which(d[,i] >= h)] <- 1
+      if (length(which(d[,i] > l & d[,i] < h)) == 0){} else {
+        d[,i][which(d[,i] > l & d[,i] < h)] <- as.numeric(cut(d[,i][which(d[,i] > l & d[,i] < h)], 10)) / 10
+      }
+
+    } else {
+      # Refit the model with relaxed model
+      mixmdl <- normalmixEM(d[,i], k = 2, maxit = 100000000, arbvar = TRUE, ECM = TRUE, mu = c(0,10))
+      # Get the peak information from the model
+      l <- mixmdl$mu[which.max(mixmdl$mu)] - SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      h <- mixmdl$mu[which.max(mixmdl$mu)] + SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      # Score the probabilities
+      m_data[,i] <- d[,i]
+      colnames(m_data)[i] <- paste(colnames(d[i]),"Model-2")
+      d[,i][which(d[,i] <= l)] <- 0
+      d[,i][which(d[,i] >= h)] <- 1
+      if (length(which(d[,i] > l & d[,i] < h)) == 0){} else {
+        d[,i][which(d[,i] > l & d[,i] < h)] <- as.numeric(cut(d[,i][which(d[,i] > l & d[,i] < h)], 10)) / 10
+      }
+
+    }
+    # Write another IF statement to check the model is still not properly fit
+    if (mixmdl$mu[which.max(mixmdl$mu)] <= mixmdl$mu[which.min(mixmdl$mu)]+mixmdl$sigma[which.min(mixmdl$mu)]){
+      # Use the untransformed data to fit the model
+      mixmdl <- normalmixEM(data[,i], k = 2, maxit = 100000000, arbvar = FALSE, ECM = TRUE)
+      # Get the peak information from the model
+      l <- mixmdl$mu[which.max(mixmdl$mu)] - SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      h <- mixmdl$mu[which.max(mixmdl$mu)] + SD*mixmdl$sigma[which.max(mixmdl$mu)]
+      # Score the probabilities
+      m_data[,i] <- data[,i]
+      colnames(m_data)[i] <- paste(colnames(d[i]),"Model-3")
+      data[,i][which(data[,i] <= l)] <- 0
+      data[,i][which(data[,i] >= h)] <- 1
+      if (length(which(data[,i] > l & data[,i] < h)) == 0){} else {
+        data[,i][which(data[,i] > l & data[,i] < h)] <- as.numeric(cut(data[,i][which(data[,i] > l & data[,i] < h)], 10)) / 10
+      }
+      d[,i] <- data[,i]
+      n_data[,i] <- data[,i]
+
+    } else {}
+
+    if (mixmdl$mu[which.max(mixmdl$mu)] <= mixmdl$mu[which.min(mixmdl$mu)]+mixmdl$sigma[which.min(mixmdl$mu)]) {
+      print(paste("Unable to fit perfect model for", colnames(data[i])))
+    } else {}
+
+    # Other required values for generating distribution plots
+    p_low <- data.frame(mixmdl$mu[1],mixmdl$sigma[1],mixmdl$lambda[1])
+    p_high <- data.frame(mixmdl$mu[2],mixmdl$sigma[2],mixmdl$lambda[2])
+    p_low$marker <- colnames(data[i])
+    p_high$marker <- colnames(data[i])
+    peaks_low <- rbind(peaks_low, p_low)
+    peaks_high <- rbind(peaks_high, p_high)
+
+    # Normalize data based on the distribution
+    n_data[,i][which(n_data[,i] <= mixmdl$mu[which.max(mixmdl$mu)] - SD*mixmdl$sigma[which.max(mixmdl$mu)])] <- 0
+
+  }
+  g_mod <- list(scores = d, peaks_low = peaks_low, peaks_high = peaks_high, M = m_data, norm_data = n_data)
+  return(g_mod)
+
+}

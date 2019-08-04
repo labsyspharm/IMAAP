@@ -1,0 +1,79 @@
+#' @title Probablility calculation for the user defined cell types.
+#' @description Takes in the probability of expression for individual marker expression and calculates the probability for cell types based on the user defined parameters.
+#' @param marker_prob Probabilty of the expression of individual markers calculared using the gaussian mixture modelling function- \code{\link{imaap_model}}
+#' @param cheat_sheet A CSV file listing the the markers that are used to define a cell type. It needs to follow the defined template.
+#' @return Probability scores for each cell type of interest.
+#' @export
+
+
+imaap_prob <- function(marker_prob,cheat_sheet){
+  require(dplyr)
+
+  # Remove all columns with only NA
+  cheat_sheet <- cheat_sheet[,colSums(is.na(cheat_sheet))<nrow(cheat_sheet)]
+
+  # Subset cheat_sheet Data to include only gene names
+  m =cheat_sheet[ , names(cheat_sheet)[-c(1,2)], drop = FALSE]
+
+  # Create an empty list for the following loop
+  cell_list = list()
+  add_residual_list = list()
+  for (i in 1:nrow(m)){
+    l = unlist(as.list(m[i,])[as.list(m[i,]) != ""])
+    # For every cell-type create a list to add, substract or concatenate ("OR") the calculated scores.
+    addition = list()
+    subtraction = list()
+    concatination = list()
+    # Seperates the markes into their respective functions
+    for (j in 1: length(l)){
+      if (startsWith(l[j], "/")){
+        concatination = c(concatination, substring(l[[j]], 2))
+      } else if (startsWith(l[j], "-")) {
+        subtraction = c(subtraction,substring(l[[j]], 2))
+      } else { addition = c(addition,l[[j]])}
+    }
+    addition = unlist(addition)
+    subtraction = unlist(subtraction)
+    concatination = unlist(concatination)
+
+    # Now subset the scores to perform the actual calculations.
+    # Addition
+    if(length(addition) != 0){score_add = rowSums(marker_prob[,addition, drop = FALSE])/length(addition)} else {score_add = (0)}
+    # Addition of more than one element (make sure all markers are expressed)
+    if(length(addition) > 1){
+      # intialise list
+      k = c()
+      t_score = marker_prob[,addition, drop = FALSE]
+      # Converting all elements into zero even if one of the markers is zero
+      for (row in 1: nrow(t_score)){
+        if(any(t_score[row,] == 0)){k = c(k, cheat_sheet$cell_type[i])} else {k = c(k, NA)}}
+    } else{k = rep(NA, nrow(marker_prob))}
+    # Subtraction
+    if(length(subtraction) != 0){score_sub = rowSums(marker_prob[,subtraction, drop = FALSE])/length(subtraction)} else {score_sub = (0)}
+    # Subtraction subsection (if there are only negative markers for a cell type)
+    if(length(score_sub) > 1 & length(addition) == 0 & length(concatination) == 0){score_sub = 1- score_sub}
+    # Concatination (take the maximum of the given markers)
+    if(length(concatination) != 0){score_concat = apply(marker_prob[,concatination, drop = FALSE], 1, max)} else {score_concat = (0)}
+    # Combine all togeather to get a master score for each cell-type.
+    if(length(score_sub) > 1 & length(addition) == 0 & length(concatination) == 0){
+      master_score = score_add + score_concat + score_sub} else {
+        master_score = score_add + score_concat - score_sub
+      }
+
+    cell_list[[i]] = master_score
+    add_residual_list[[i]] = k
+  }
+
+  # Convert the generated list into a dataframe.
+  cell_score = lapply(cell_list, data.frame, stringsAsFactors = FALSE)
+  add_residual = lapply(add_residual_list, data.frame, stringsAsFactors = FALSE)
+  cell_score = bind_cols(cell_score)
+  add_residual = bind_cols(add_residual)
+  colnames(cell_score) = cheat_sheet$cell_type
+  colnames(add_residual) = paste("Likely_",cheat_sheet$cell_type)
+  row.names(cell_score) = row.names(marker_prob)
+  row.names(add_residual) = row.names(marker_prob)
+  final_score = cbind(cell_score, add_residual)
+  final_score <- final_score[,colSums(is.na(final_score))<nrow(final_score)]
+  return(final_score)
+}

@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1564755049550.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "512558609",
+    "id" : "E7D9086D",
+    "lastKnownWriteTime" : 1564759567,
+    "last_content_update" : 1564759567760,
+    "path" : "C:/Users/ajn16/Dropbox (Partners HealthCare)/packages/IMAAP/R/imaap_annotation.R",
+    "project_path" : "R/imaap_annotation.R",
+    "properties" : {
+        "cursorPosition" : "21,19",
+        "scrollLine" : "0",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
