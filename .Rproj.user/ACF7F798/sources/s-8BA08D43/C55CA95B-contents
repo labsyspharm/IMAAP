@@ -58,7 +58,7 @@ The algorithm follows a sequential annotation methodology. For example, based on
 
 **Line 9 - 10:** Takes the macrophages and divides into M1 and M2 macrophages.
 
-/ means 'OR': For example **(line 7)**- Macrophages could be defined by the expression of CD68 or CD 163.
+**/ means 'OR'**: For example **(line 7)**- Macrophages could be defined by the expression of CD68 or CD 163.
 
 ```R
 cheat_sheet <- read.table(file = "cheat_sheet.txt", sep='\t', header = T, stringsAsFactors=FALSE)
@@ -87,6 +87,8 @@ head(results)
 42_2578   Likely_ T cells
 76_2414    CD45 Neg Tumor
 ```
+
+The gaussian fitted distribution plot will be saved in a folder named **Fitted distribution plots/** in your working directory.
 
 
 
