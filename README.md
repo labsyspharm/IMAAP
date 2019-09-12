@@ -1,11 +1,14 @@
 # IMAAP (Image Annotation and Analysis Package)
-This work is supported by ... <br>
+
+This work is supported by the *NIH Grant 1U54CA225088: Systems Pharmacology of Therapeutic and Adverse Responses to Immune Checkpoint and Small Molecule Drugs* and by the *NCI grant 1U2CCA233262: Pre-cancer atlases of cutaneous and hematologic origin (PATCH Center)*.
+
 **Author:** Ajit Johnson Nirmal
+
 # Installation
 The package can be installed directly from GitHub with the following commands:
 ```R
 if( !require(devtools) ) install.packages("devtools")
-devtools::install_github( "ajitjohnson/IMAAP" )
+devtools::install_github( "labsyspharm/IMAAP" )
 ```
 
 Load the library
